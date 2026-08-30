@@ -13,11 +13,13 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.firebase.auth.FirebaseAuth
+import kotlinx.coroutines.launch
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
@@ -26,6 +28,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var auth: FirebaseAuth
     private lateinit var fusedLocationClient: FusedLocationProviderClient
+    private lateinit var database: AppDatabase
 
     private lateinit var tvLocationName: TextView
     private lateinit var tvTemperature: TextView
@@ -35,10 +38,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvErrorMessage: TextView
     private lateinit var mainProgressBar: ProgressBar
     private lateinit var btnRefresh: Button
+    private lateinit var btnSave: Button
 
     private val locationPermissionRequestCode = 100
 
-    // Holds the most recently fetched weather data - needed later for Save/Share features
     private var currentWeather: WeatherResponse? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -47,6 +50,7 @@ class MainActivity : AppCompatActivity() {
 
         auth = FirebaseAuth.getInstance()
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+        database = AppDatabase.getDatabase(this)
 
         tvLocationName = findViewById(R.id.tvLocationName)
         tvTemperature = findViewById(R.id.tvTemperature)
@@ -56,6 +60,7 @@ class MainActivity : AppCompatActivity() {
         tvErrorMessage = findViewById(R.id.tvErrorMessage)
         mainProgressBar = findViewById(R.id.mainProgressBar)
         btnRefresh = findViewById(R.id.btnRefresh)
+        btnSave = findViewById(R.id.btnSave)
 
         findViewById<Button>(R.id.btnLogout).setOnClickListener {
             auth.signOut()
@@ -65,6 +70,10 @@ class MainActivity : AppCompatActivity() {
 
         btnRefresh.setOnClickListener {
             checkLocationPermissionAndFetch()
+        }
+
+        btnSave.setOnClickListener {
+            saveCurrentWeather()
         }
 
         checkLocationPermissionAndFetch()
@@ -136,7 +145,7 @@ class MainActivity : AppCompatActivity() {
                 fetchWeather(location.latitude, location.longitude)
             } else {
                 Toast.makeText(this, "Using default test location (GPS unavailable)", Toast.LENGTH_SHORT).show()
-                fetchWeather(26.85, 89.39) // fallback test coordinate
+                fetchWeather(26.85, 89.39)
             }
         }.addOnFailureListener {
             showError("Failed to get location: ${it.localizedMessage}")
@@ -184,6 +193,27 @@ class MainActivity : AppCompatActivity() {
         tvWindSpeed.text = "${weather.wind.speed} km/h"
 
         tvErrorMessage.visibility = View.GONE
+    }
+
+    private fun saveCurrentWeather() {
+        val weather = currentWeather
+        if (weather == null) {
+            Toast.makeText(this, "No weather data to save yet.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val record = WeatherRecord(
+            locationName = weather.name,
+            temperature = weather.main.temp,
+            condition = weather.weather.firstOrNull()?.description ?: "Unknown",
+            humidity = weather.main.humidity,
+            windSpeed = weather.wind.speed
+        )
+
+        lifecycleScope.launch {
+            database.weatherDao().insert(record)
+            Toast.makeText(this@MainActivity, "Weather record saved!", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun showLoading() {
