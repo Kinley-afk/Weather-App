@@ -1,10 +1,12 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
-
+    alias(libs.plugins.ksp)
     alias(libs.plugins.google.services)
 }
-
 android {
     namespace = "com.example.weatherapp"
     compileSdk = 36
@@ -17,6 +19,13 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        val localProperties = Properties()
+        val localPropertiesFile = rootProject.file("local.properties")
+        if (localPropertiesFile.exists()) {
+            localProperties.load(FileInputStream(localPropertiesFile))
+        }
+        buildConfigField("String", "OPENWEATHER_API_KEY", "\"${localProperties.getProperty("OPENWEATHER_API_KEY", "")}\"")
     }
 
     buildTypes {
@@ -37,6 +46,7 @@ android {
     }
     buildFeatures {
         viewBinding = true
+        buildConfig = true
     }
 }
 
@@ -59,4 +69,13 @@ dependencies {
     implementation("com.google.android.gms:play-services-location:21.3.0") // GPS
     implementation("androidx.recyclerview:recyclerview:1.3.2")
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.4")
+
+    implementation(libs.androidx.cardview)
+
+    implementation(libs.retrofit.core)
+    implementation(libs.retrofit.gson)
+
+    implementation(libs.room.runtime)
+    implementation(libs.room.ktx)
+    ksp(libs.room.compiler)
 }

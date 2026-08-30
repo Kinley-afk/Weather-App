@@ -1,25 +1,206 @@
 package com.example.weatherapp
 
+import android.Manifest
+import android.annotation.SuppressLint
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Bundle
+import android.view.View
 import android.widget.Button
+import android.widget.ProgressBar
+import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.firebase.auth.FirebaseAuth
+import retrofit2.Call
+import retrofit2.Callback
+import retrofit2.Response
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var auth: FirebaseAuth
+    private lateinit var fusedLocationClient: FusedLocationProviderClient
+
+    private lateinit var tvLocationName: TextView
+    private lateinit var tvTemperature: TextView
+    private lateinit var tvCondition: TextView
+    private lateinit var tvHumidity: TextView
+    private lateinit var tvWindSpeed: TextView
+    private lateinit var tvErrorMessage: TextView
+    private lateinit var mainProgressBar: ProgressBar
+    private lateinit var btnRefresh: Button
+
+    private val locationPermissionRequestCode = 100
+
+    // Holds the most recently fetched weather data - needed later for Save/Share features
+    private var currentWeather: WeatherResponse? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
         auth = FirebaseAuth.getInstance()
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+
+        tvLocationName = findViewById(R.id.tvLocationName)
+        tvTemperature = findViewById(R.id.tvTemperature)
+        tvCondition = findViewById(R.id.tvCondition)
+        tvHumidity = findViewById(R.id.tvHumidity)
+        tvWindSpeed = findViewById(R.id.tvWindSpeed)
+        tvErrorMessage = findViewById(R.id.tvErrorMessage)
+        mainProgressBar = findViewById(R.id.mainProgressBar)
+        btnRefresh = findViewById(R.id.btnRefresh)
 
         findViewById<Button>(R.id.btnLogout).setOnClickListener {
             auth.signOut()
             startActivity(Intent(this, LoginActivity::class.java))
             finish()
         }
+
+        btnRefresh.setOnClickListener {
+            checkLocationPermissionAndFetch()
+        }
+
+        checkLocationPermissionAndFetch()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        if (auth.currentUser == null) {
+            startActivity(Intent(this, LoginActivity::class.java))
+            finish()
+        }
+    }
+
+    private fun checkLocationPermissionAndFetch() {
+        val hasFineLocation = ContextCompat.checkSelfPermission(
+            this, Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (hasFineLocation) {
+            getCurrentLocation()
+        } else {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION),
+                locationPermissionRequestCode
+            )
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == locationPermissionRequestCode) {
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                getCurrentLocation()
+            } else {
+                showError("Location permission denied. Please enable it to see local weather.")
+            }
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun getCurrentLocation() {
+        showLoading()
+
+        fusedLocationClient.lastLocation.addOnSuccessListener { lastLocation ->
+            if (lastLocation != null) {
+                fetchWeather(lastLocation.latitude, lastLocation.longitude)
+            } else {
+                requestFreshLocation()
+            }
+        }.addOnFailureListener {
+            requestFreshLocation()
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun requestFreshLocation() {
+        val cancellationTokenSource = CancellationTokenSource()
+
+        fusedLocationClient.getCurrentLocation(
+            Priority.PRIORITY_HIGH_ACCURACY,
+            cancellationTokenSource.token
+        ).addOnSuccessListener { location ->
+            if (location != null) {
+                fetchWeather(location.latitude, location.longitude)
+            } else {
+                Toast.makeText(this, "Using default test location (GPS unavailable)", Toast.LENGTH_SHORT).show()
+                fetchWeather(26.85, 89.39) // fallback test coordinate
+            }
+        }.addOnFailureListener {
+            showError("Failed to get location: ${it.localizedMessage}")
+        }
+    }
+
+    private fun fetchWeather(latitude: Double, longitude: Double) {
+        showLoading()
+
+        val apiKey = BuildConfig.OPENWEATHER_API_KEY
+
+        if (apiKey.isBlank()) {
+            showError("API key missing. Check local.properties setup.")
+            return
+        }
+
+        RetrofitClient.weatherApi.getCurrentWeather(latitude, longitude, apiKey)
+            .enqueue(object : Callback<WeatherResponse> {
+                override fun onResponse(
+                    call: Call<WeatherResponse>,
+                    response: Response<WeatherResponse>
+                ) {
+                    hideLoading()
+                    if (response.isSuccessful && response.body() != null) {
+                        displayWeather(response.body()!!)
+                    } else {
+                        showError("Failed to load weather (code ${response.code()}). Try again.")
+                    }
+                }
+
+                override fun onFailure(call: Call<WeatherResponse>, t: Throwable) {
+                    hideLoading()
+                    showError("No internet connection or server unreachable.")
+                }
+            })
+    }
+
+    private fun displayWeather(weather: WeatherResponse) {
+        currentWeather = weather
+
+        tvLocationName.text = weather.name
+        tvTemperature.text = "${weather.main.temp.toInt()}°C"
+        tvCondition.text = weather.weather.firstOrNull()?.description?.replaceFirstChar { it.uppercase() } ?: "Unknown"
+        tvHumidity.text = "${weather.main.humidity}%"
+        tvWindSpeed.text = "${weather.wind.speed} km/h"
+
+        tvErrorMessage.visibility = View.GONE
+    }
+
+    private fun showLoading() {
+        mainProgressBar.visibility = View.VISIBLE
+        tvErrorMessage.visibility = View.GONE
+        btnRefresh.isEnabled = false
+    }
+
+    private fun hideLoading() {
+        mainProgressBar.visibility = View.GONE
+        btnRefresh.isEnabled = true
+    }
+
+    private fun showError(message: String) {
+        mainProgressBar.visibility = View.GONE
+        tvErrorMessage.text = message
+        tvErrorMessage.visibility = View.VISIBLE
+        btnRefresh.isEnabled = true
     }
 }

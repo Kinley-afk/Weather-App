@@ -7,6 +7,7 @@ import android.view.View
 import android.widget.Button
 import android.widget.EditText
 import android.widget.ProgressBar
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.google.firebase.auth.FirebaseAuth
@@ -26,6 +27,7 @@ class RegisterActivity : AppCompatActivity() {
         val etConfirm = findViewById<EditText>(R.id.etRegConfirmPassword)
         val btnRegister = findViewById<Button>(R.id.btnRegister)
         val progressBar = findViewById<ProgressBar>(R.id.progressBarReg)
+        val tvGoToLogin = findViewById<TextView>(R.id.tvGoToLogin)
 
         btnRegister.setOnClickListener {
             val email = etEmail.text.toString().trim()
@@ -54,6 +56,10 @@ class RegisterActivity : AppCompatActivity() {
                         ).show()
                     }
                 }
+        }
+
+        tvGoToLogin.setOnClickListener {
+            finish() // returns to Login screen behind this one
         }
     }
 
