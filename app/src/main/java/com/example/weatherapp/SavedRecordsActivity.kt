@@ -8,6 +8,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.launch
+import android.content.Intent
 
 class SavedRecordsActivity : AppCompatActivity() {
 
@@ -27,7 +28,9 @@ class SavedRecordsActivity : AppCompatActivity() {
         recyclerView.layoutManager = LinearLayoutManager(this)
 
         adapter = WeatherRecordAdapter(emptyList()) { record ->
-            // Tapping a record will open View/Edit screen - coming next
+            val intent = Intent(this, RecordDetailActivity::class.java)
+            intent.putExtra(RecordDetailActivity.EXTRA_RECORD_ID, record.id)
+            startActivity(intent)
         }
         recyclerView.adapter = adapter
 

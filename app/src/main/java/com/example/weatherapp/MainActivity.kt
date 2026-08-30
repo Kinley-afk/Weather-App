@@ -39,6 +39,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var mainProgressBar: ProgressBar
     private lateinit var btnRefresh: Button
     private lateinit var btnSave: Button
+    private lateinit var btnViewSaved: Button
+    private lateinit var btnUnitToggle: Button
 
     private val locationPermissionRequestCode = 100
 
@@ -61,6 +63,10 @@ class MainActivity : AppCompatActivity() {
         mainProgressBar = findViewById(R.id.mainProgressBar)
         btnRefresh = findViewById(R.id.btnRefresh)
         btnSave = findViewById(R.id.btnSave)
+        btnViewSaved = findViewById(R.id.btnViewSaved)
+        btnUnitToggle = findViewById(R.id.btnUnitToggle)
+
+        updateUnitToggleLabel()
 
         findViewById<Button>(R.id.btnLogout).setOnClickListener {
             auth.signOut()
@@ -76,6 +82,19 @@ class MainActivity : AppCompatActivity() {
             saveCurrentWeather()
         }
 
+        btnViewSaved.setOnClickListener {
+            startActivity(Intent(this, SavedRecordsActivity::class.java))
+        }
+
+        btnUnitToggle.setOnClickListener {
+            val current = PreferencesManager.getTemperatureUnit(this)
+            val newUnit = if (current == PreferencesManager.UNIT_CELSIUS)
+                PreferencesManager.UNIT_FAHRENHEIT else PreferencesManager.UNIT_CELSIUS
+            PreferencesManager.setTemperatureUnit(this, newUnit)
+            updateUnitToggleLabel()
+            currentWeather?.let { displayWeather(it) }
+        }
+
         checkLocationPermissionAndFetch()
     }
 
@@ -85,6 +104,12 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, LoginActivity::class.java))
             finish()
         }
+    }
+
+    private fun updateUnitToggleLabel() {
+        val current = PreferencesManager.getTemperatureUnit(this)
+        btnUnitToggle.text = if (current == PreferencesManager.UNIT_CELSIUS)
+            "Switch to °F" else "Switch to °C"
     }
 
     private fun checkLocationPermissionAndFetch() {
@@ -120,17 +145,11 @@ class MainActivity : AppCompatActivity() {
 
     @SuppressLint("MissingPermission")
     private fun getCurrentLocation() {
+        // Always request a fresh fix instead of relying on Play Services' cached
+        // lastLocation, which can return a stale value (e.g. after changing the
+        // emulator's mock location) and never get refreshed.
         showLoading()
-
-        fusedLocationClient.lastLocation.addOnSuccessListener { lastLocation ->
-            if (lastLocation != null) {
-                fetchWeather(lastLocation.latitude, lastLocation.longitude)
-            } else {
-                requestFreshLocation()
-            }
-        }.addOnFailureListener {
-            requestFreshLocation()
-        }
+        requestFreshLocation()
     }
 
     @SuppressLint("MissingPermission")
@@ -187,7 +206,7 @@ class MainActivity : AppCompatActivity() {
         currentWeather = weather
 
         tvLocationName.text = weather.name
-        tvTemperature.text = "${weather.main.temp.toInt()}°C"
+        tvTemperature.text = PreferencesManager.formatTemperature(this, weather.main.temp)
         tvCondition.text = weather.weather.firstOrNull()?.description?.replaceFirstChar { it.uppercase() } ?: "Unknown"
         tvHumidity.text = "${weather.main.humidity}%"
         tvWindSpeed.text = "${weather.wind.speed} km/h"

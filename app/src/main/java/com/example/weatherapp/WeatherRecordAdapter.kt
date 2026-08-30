@@ -25,8 +25,10 @@ class WeatherRecordAdapter(
 
     override fun onBindViewHolder(holder: RecordViewHolder, position: Int) {
         val record = records[position]
+        val tempStr = PreferencesManager.formatTemperature(holder.itemView.context, record.temperature)
+
         holder.locationName.text = record.locationName
-        holder.tempCondition.text = "${record.temperature.toInt()}°C · ${record.condition.replaceFirstChar { it.uppercase() }}"
+        holder.tempCondition.text = "$tempStr · ${record.condition.replaceFirstChar { it.uppercase() }}"
         holder.humidityWind.text = "Humidity: ${record.humidity}% · Wind: ${record.windSpeed} km/h"
 
         holder.itemView.setOnClickListener {

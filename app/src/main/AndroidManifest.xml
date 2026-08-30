@@ -30,6 +30,10 @@
         <activity
             android:name=".SavedRecordsActivity"
             android:exported="false" />
+
+        <activity
+            android:name=".RecordDetailActivity"
+            android:exported="false" />
     </application>
 
 </manifest>
